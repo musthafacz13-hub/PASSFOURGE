@@ -1,37 +1,21 @@
-import type {Metadata} from 'next';
-import { Orbitron, Inter, JetBrains_Mono } from 'next/font/google';
-import './globals.css'; // Global styles
-
-const orbitron = Orbitron({
-  subsets: ['latin'],
-  variable: '--font-orbitron',
-  weight: ['400', '500', '600', '700', '800', '900'],
-  display: 'swap',
-});
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import './globals.css';
 
 const inter = Inter({
   subsets: ['latin'],
-  variable: '--font-inter',
-  weight: ['300', '400', '500', '600', '700'],
-  display: 'swap',
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-jetbrains-mono',
-  weight: ['300', '400', '500', '600', '700'],
   display: 'swap',
 });
 
 export const metadata: Metadata = {
-  title: 'PassForge // Professional Security Engine',
-  description: 'Professional high-entropy password generator and security matrix. Dark, minimal, and secure.',
+  title: 'PassForge',
+  description: 'Security Platform',
 };
 
-export default function RootLayout({children}: {children: React.ReactNode}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark bg-[#040404]" suppressHydrationWarning>
-      <body className={`${orbitron.variable} ${inter.variable} ${jetbrainsMono.variable} antialiased bg-[#040404]`} suppressHydrationWarning>
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <body className={`${inter.className} bg-zinc-950 text-zinc-50 antialiased`} suppressHydrationWarning>
         {children}
       </body>
     </html>
