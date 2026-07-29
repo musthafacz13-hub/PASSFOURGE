@@ -1,21 +1,28 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 
 const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
+  variable: '--font-sans',
+});
+
+const mono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-mono',
 });
 
 export const metadata: Metadata = {
-  title: 'PassForge',
-  description: 'Security Platform',
+  title: 'PassForge — Security & Entropy Lab',
+  description: 'A premium minimalist password generator and live strength analyzer.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
-      <body className={`${inter.className} bg-zinc-950 text-zinc-50 antialiased`} suppressHydrationWarning>
+    <html lang="en" className="light" suppressHydrationWarning>
+      <body className={`${inter.variable} ${mono.variable} font-sans bg-white text-zinc-900 antialiased`} suppressHydrationWarning>
         {children}
       </body>
     </html>
