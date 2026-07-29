@@ -72,40 +72,31 @@ export default function PassForgeApp() {
   // App-level preferences
   const [animationsEnabled, setAnimationsEnabled] = React.useState<boolean>(true);
   const [autoCopyToClipboard, setAutoCopyToClipboard] = React.useState<boolean>(true);
-  const [entropyLength, setEntropyLength] = React.useState<number>(32);
+  const [entropyLength, setEntropyLength] = React.useState<number>(10);
   const [encryptionLevel, setEncryptionLevel] = React.useState<string>('AES-256-GCM');
   const [sessionTimeout, setSessionTimeout] = React.useState<number>(3600);
   
   // Interactive password display state
-  const [currentPresetIndex, setCurrentPresetIndex] = React.useState<number>(0);
+  const [activePassword, setActivePassword] = React.useState<string>('');
+  const [totalGeneratedCount, setTotalGeneratedCount] = React.useState<number>(0);
+  const [sessionUptime, setSessionUptime] = React.useState<number>(0);
   const [copiedNotification, setCopiedNotification] = React.useState<boolean>(false);
   const [customPassword, setCustomPassword] = React.useState<string>('');
+  const [toast, setToast] = React.useState<{ message: string; visible: boolean }>({ message: '', visible: false });
+  const [isGenerating, setIsGenerating] = React.useState<boolean>(false);
   
-  // Recent password logs (simulated, fully visual)
-  const [recentLogs, setRecentLogs] = React.useState<LogEntry[]>([
-    { id: '1', timestamp: '2026.07.28 05:28:09', sequence: '5+eV-V)Qu-U+_r-)Ym0', revealed: false, strength: 'EXCELLENT' },
-    { id: '2', timestamp: '2026.07.28 05:21:44', sequence: '7x#D!k9_Lp&m_vS*2Wq@9z', revealed: false, strength: 'MILITARY_GRADE' },
-    { id: '3', timestamp: '2026.07.28 05:15:30', sequence: 'k0_39c7b2_8d!e9a_2c4f', revealed: false, strength: 'OPTIMAL' },
-    { id: '4', timestamp: '2026.07.28 04:58:12', sequence: 'ADMIN_ROOT_TOKEN_SEC_98', revealed: false, strength: 'SECURE_PHRASE' },
-    { id: '5', timestamp: '2026.07.28 04:42:01', sequence: 'A9_r7!uE-Vw3_xM8_bZ4-Pq', revealed: false, strength: 'EXCELLENT' }
-  ]);
+  // Recent password logs (initialized empty, dynamically populated)
+  const [recentLogs, setRecentLogs] = React.useState<LogEntry[]>([]);
 
-  // Console output log list inside the debugger widget
-  const [consoleLogs, setConsoleLogs] = React.useState<string[]>([
-    '[14:32:05] SYS: AUTHENTICATING_ROOT_USER... SUCCESS',
-    '[14:32:08] SEC: RSA_KEY_GENERATED // LENGTH: 4096',
-    '[14:33:12] SYS: CACHE_PURGED // SECTOR_09',
-    '[14:34:45] SYS: HEARTBEAT_PULSE_DETECTED',
-    '[14:35:01] LOG: NEW_PASSWORD_REQUEST_RECEIVED',
-    '[05:28:09] EVT: PASSWORD_GENERATED // ENTROPY_OPTIMIZED'
-  ]);
+  // Console output log list inside the debugger widget (initialized empty)
+  const [consoleLogs, setConsoleLogs] = React.useState<string[]>([]);
 
-  // Generator screen customized toggle checkboxes
+  // Generator screen customized toggle checkboxes (restricted alphanumeric defaults)
   const [genOpts, setGenOpts] = React.useState({
     uppercase: true,
     lowercase: true,
     numbers: true,
-    symbols: true,
+    symbols: false,
     excludeAmbiguous: false,
     pronounceable: false,
   });
@@ -160,85 +151,102 @@ export default function PassForgeApp() {
 
   const colors = themeColors[activeTheme];
 
-  // Simple log writer helper (declared at top so it can be referenced safely)
+  // Simple log writer helper with smart enterprise security standard converter
   const addConsoleLog = React.useCallback((text: string) => {
     const now = new Date();
-    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-    setConsoleLogs((prev) => [...prev, `[${timeStr}] EVT: ${text}`]);
-  }, []);
-
-  // Trigger sequence change simulating generator
-  const triggerGenerateSequence = React.useCallback(() => {
-    const nextIndex = (currentPresetIndex + 1) % PASSWORD_PRESETS.length;
-    setCurrentPresetIndex(nextIndex);
+    const h = now.getHours().toString().padStart(2, '0');
+    const m = now.getMinutes().toString().padStart(2, '0');
+    const s = now.getSeconds().toString().padStart(2, '0');
+    const timeStr = `${h}:${m}:${s}`;
     
-    // Add beautiful debug audit trail
-    addConsoleLog(`GENERATED PASSWORD PRESET // LENGTH: ${PASSWORD_PRESETS[nextIndex].sequence.length} // TYPE: ${PASSWORD_PRESETS[nextIndex].type}`);
-
-    // If auto copy enabled
-    if (autoCopyToClipboard) {
-      navigator.clipboard.writeText(PASSWORD_PRESETS[nextIndex].sequence);
-      setCopiedNotification(true);
-      setTimeout(() => setCopiedNotification(false), 2000);
-      addConsoleLog('AUTO-COPIED GENERATED PRESET TO CLIPBOARD');
+    let formattedText = text;
+    // Map standard log lines into exact security-grade enterprise logging syntax
+    if (text.startsWith('UI: Forced active')) {
+      formattedText = `[SYSTEM] Session portal active tab routed to HOME`;
+    } else if (text.startsWith('UI: Escape triggered')) {
+      formattedText = `[SYSTEM] Toggle settings menu shortcut executed via ESC`;
+    } else if (text.startsWith('UI: Visited Home')) {
+      formattedText = `[SYSTEM] Main metrics dashboard viewport initialized`;
+    } else if (text.startsWith('UI: Visited Generator')) {
+      formattedText = `[SYSTEM] Cryptographic CSPRNG generation matrix active`;
+    } else if (text.startsWith('UI: Visited Cryptographic Docs')) {
+      formattedText = `[SYSTEM] Loading secure operational documentation files`;
+    } else if (text.startsWith('UI: Visited System Philosophy')) {
+      formattedText = `[SYSTEM] Initializing cryptosystem manifesto viewport`;
+    } else if (text.startsWith('UI: Visited Configuration Console')) {
+      formattedText = `[SYSTEM] Enterprise admin configuration overrides active`;
+    } else if (text.startsWith('TESTER: Cleared custom')) {
+      formattedText = `[ANALYZER] Volatile custom passphrase assessment buffer purged`;
+    } else if (text.startsWith('TESTER: Custom password stream')) {
+      formattedText = `[ANALYZER] Live entropy analysis requested for target sequence`;
+    } else if (text.startsWith('OVERRODE CONFIG: PREFERRED LENGTH')) {
+      formattedText = `[CONFIG] Preferred entropy token length updated to ${text.split('->')[1]?.trim() || ''}`;
+    } else if (text.startsWith('DOWNLOAD: Initiated')) {
+      formattedText = `[EXPORT] Initiating secure download of cryptographic manifesto payload`;
+    } else if (text.startsWith('AUDIT: Triggered')) {
+      formattedText = `[AUDIT] Integrity transaction log fetch initiated by root user`;
+    } else if (text.startsWith('UI: Changed system accent theme')) {
+      formattedText = `[CONFIG] Primary theme layout profile modified to ${text.split('to')[1]?.trim() || ''}`;
+    } else if (text.startsWith('TOGGLED ANIMATIONS:')) {
+      formattedText = `[CONFIG] Interface shader effects and animation rendering toggled ${text.split(':')[1]?.trim() || ''}`;
+    } else if (text.startsWith('TOGGLED AUTO-COPY:')) {
+      formattedText = `[CONFIG] Automatic secure clipboard memory export toggled ${text.split(':')[1]?.trim() || ''}`;
+    } else if (text.startsWith('OVERRODE CONFIG: SESSION TIMEOUT')) {
+      formattedText = `[CONFIG] Secure inactive session timeout modified to ${text.split('->')[1]?.trim() || ''}`;
+    } else if (text.startsWith('OVERRODE CONFIG: CIPHER PROTOCOL')) {
+      formattedText = `[CONFIG] Symmetric hardware cipher protocol suite overridden to ${text.split('->')[1]?.trim() || ''}`;
+    } else if (text.startsWith('SYS: Opened danger zone')) {
+      formattedText = `[SECURITY] CRITICAL: Mass hardware vault purge window triggered`;
+    } else if (text.startsWith('SYS: Cancelled danger')) {
+      formattedText = `[SECURITY] Aborted system wipe operation safely. Volatile buffers intact.`;
+    } else if (text.startsWith('VOLATILE CACHED VAULT WIPED')) {
+      formattedText = `[SECURITY] CRITICAL: Volatile cached vault was mass-wiped. All buffers flushed.`;
+    } else if (text.startsWith('GENERATED PASSWORD')) {
+      const parts = text.split('//');
+      const len = parts[1]?.trim().replace('LENGTH:', 'LEN:') || '';
+      const str = parts[2]?.trim().replace('STRENGTH:', 'LEVEL:') || '';
+      formattedText = `[INFO] CSPRNG key stream output generated successfully [${len} | ${str}]`;
+    } else if (text.startsWith('AUTO-COPIED GENERATED PASSKEY')) {
+      formattedText = `[INFO] Secure clipboard memory block updated with CSPRNG sequence`;
+    } else if (text.startsWith('REVEALED PASSWORD')) {
+      formattedText = `[SECURITY] Local memory log passphrase revealed in viewport`;
+    } else if (text.startsWith('MASKED PASSWORD')) {
+      formattedText = `[SECURITY] Local memory log passphrase masked in viewport`;
+    } else if (text.startsWith('MANUALLY COPIED SELECTED')) {
+      formattedText = `[INFO] Selected ciphertext string copy-exported to client clipboard`;
+    } else if (text.startsWith('MANUALLY COPY-EXPORTED')) {
+      formattedText = `[INFO] Target alphanumeric token copy-exported to client clipboard`;
     }
-  }, [currentPresetIndex, autoCopyToClipboard, addConsoleLog]);
-
-  // Reveal logged sequences toggle
-  const toggleLogReveal = React.useCallback((id: string) => {
-    setRecentLogs((prev) => 
-      prev.map((log) => {
-        if (log.id === id) {
-          const nextState = !log.revealed;
-          addConsoleLog(`${nextState ? 'REVEALED' : 'MASKED'} PASSWORD TRANSACTION RETRIEVAL`);
-          return { ...log, revealed: nextState };
-        }
-        return log;
-      })
-    );
-  }, [addConsoleLog]);
-
-  // Custom visual copy action
-  const handleCopyValue = React.useCallback((val: string) => {
-    navigator.clipboard.writeText(val);
-    setCopiedNotification(true);
-    setTimeout(() => setCopiedNotification(false), 2000);
-    addConsoleLog(`MANUALLY COPIED SELECTED ENCRYPTED STREAM`);
-  }, [addConsoleLog]);
-
-  // Wipe simulated data function
-  const executeVolatileWipe = React.useCallback(() => {
-    setWipeInProcess(true);
-    setWipeStatus('LOCKING VAULT FILESYSTEM...');
     
-    setTimeout(() => {
-      setWipeStatus('OVERWRITING VOLATILE BUFFER ENTROPY WITH RANDOM BYTES...');
-    }, 1000);
-
-    setTimeout(() => {
-      setWipeStatus('PURGING MEMORY HEAPS AND FLUSHING CACHES...');
-    }, 2200);
-
-    setTimeout(() => {
-      setRecentLogs([]);
-      setConsoleLogs([
-        '[00:00:00] CRIT: SYSTEM DATA MASS PURGE EXECUTED BY ADMIN_ROOT',
-        '[00:00:01] SYS: SECURITY CONTEXT RESET COMPLETED'
-      ]);
-      setWipeInProcess(false);
-      setShowWipeConfirm(false);
-      setActiveTab('home');
-      addConsoleLog('VOLATILE CACHED VAULT WIPED COMPLETELY');
-    }, 3500);
-  }, [addConsoleLog]);
-
-  // Replay Boot Animation
-  const handleReplayBoot = React.useCallback(() => {
-    setBootLogs([]);
-    setBootIndex(0);
-    setBootProgress(0);
-    setIsLoading(true);
+    setConsoleLogs((prev) => {
+      const nextLogs = [...prev, `[${timeStr}] ${formattedText}`];
+      if (nextLogs.length > 30) nextLogs.shift();
+      return nextLogs;
+    });
   }, []);
+
+  // Cryptographically secure password generator (uppercase, lowercase, numbers strictly)
+  const generateSecurePassword = React.useCallback((length: number = 10): string => {
+    let chars = '';
+    if (genOpts.uppercase) chars += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    if (genOpts.lowercase) chars += 'abcdefghijklmnopqrstuvwxyz';
+    if (genOpts.numbers) chars += '0123456789';
+
+    // Strict alphanumeric safety fallback
+    if (!chars) chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+    if (genOpts.excludeAmbiguous) {
+      chars = chars.replace(/[O0Il1]/g, '');
+    }
+
+    const array = new Uint32Array(length);
+    window.crypto.getRandomValues(array);
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars[array[i] % chars.length];
+    }
+    return result;
+  }, [genOpts.uppercase, genOpts.lowercase, genOpts.numbers, genOpts.excludeAmbiguous]);
 
   // Real-time custom password entropy calculation functions
   const calculateCustomEntropy = React.useCallback((pwd: string): number => {
@@ -277,17 +285,157 @@ export default function PassForgeApp() {
     return 'BILLIONS OF YEARS';
   }, []);
 
+  // Trigger sequence change generating fresh secure password sequence
+  const triggerGenerateSequence = React.useCallback(() => {
+    if (isGenerating) return;
+    setIsGenerating(true);
+    
+    // Simulate real hardware HSM token calculation lag
+    setTimeout(() => {
+      const newPwd = generateSecurePassword(entropyLength);
+      setActivePassword(newPwd);
+      setTotalGeneratedCount((prev) => prev + 1);
+
+      const now = new Date();
+      const timeStr = `${now.getFullYear()}.${(now.getMonth()+1).toString().padStart(2, '0')}.${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+      
+      const entropy = calculateCustomEntropy(newPwd);
+      const strengthRating = getCustomStrength(entropy).text;
+
+      const newLog: LogEntry = {
+        id: Math.random().toString(36).substr(2, 9),
+        timestamp: timeStr,
+        sequence: newPwd,
+        revealed: false,
+        strength: strengthRating,
+      };
+
+      setRecentLogs((prev) => [newLog, ...prev]);
+      addConsoleLog(`GENERATED PASSWORD // LENGTH: ${newPwd.length} // STRENGTH: ${strengthRating}`);
+
+      if (autoCopyToClipboard) {
+        navigator.clipboard.writeText(newPwd);
+        setToast({ message: 'PASSPHRASE SECURELY COPY-EXPORTED', visible: true });
+        setTimeout(() => setToast((prev) => ({ ...prev, visible: false })), 2200);
+        addConsoleLog('AUTO-COPIED GENERATED PASSKEY TO CLIPBOARD');
+      }
+      setIsGenerating(false);
+    }, 400);
+  }, [entropyLength, generateSecurePassword, calculateCustomEntropy, getCustomStrength, autoCopyToClipboard, addConsoleLog, isGenerating]);
+
+  // Reveal logged sequences toggle
+  const toggleLogReveal = React.useCallback((id: string) => {
+    setRecentLogs((prev) => 
+      prev.map((log) => {
+        if (log.id === id) {
+          const nextState = !log.revealed;
+          addConsoleLog(`${nextState ? 'REVEALED' : 'MASKED'} PASSWORD TRANSACTION RETRIEVAL`);
+          return { ...log, revealed: nextState };
+        }
+        return log;
+      })
+    );
+  }, [addConsoleLog]);
+
+  // Custom visual copy action
+  const handleCopyValue = React.useCallback((val: string) => {
+    if (!val) return;
+    navigator.clipboard.writeText(val);
+    setToast({ message: 'STREAM SECURELY COPY-EXPORTED', visible: true });
+    setCopiedNotification(true);
+    setTimeout(() => setToast((prev) => ({ ...prev, visible: false })), 2000);
+    setTimeout(() => setCopiedNotification(false), 2000);
+    addConsoleLog(`MANUALLY COPY-EXPORTED DATA STREAM`);
+  }, [addConsoleLog]);
+
+  // Wipe simulated data function
+  const executeVolatileWipe = React.useCallback(() => {
+    setWipeInProcess(true);
+    setWipeStatus('LOCKING VAULT FILESYSTEM...');
+    
+    setTimeout(() => {
+      setWipeStatus('OVERWRITING VOLATILE BUFFER ENTROPY WITH RANDOM BYTES...');
+    }, 1000);
+
+    setTimeout(() => {
+      setWipeStatus('PURGING MEMORY HEAPS AND FLUSHING CACHES...');
+    }, 2200);
+
+    setTimeout(() => {
+      setRecentLogs([]);
+      setConsoleLogs([
+        '[00:00:00] [SECURITY] CRITICAL: Volatile cached vault was mass-wiped. All buffers flushed.',
+        '[00:00:01] [SYSTEM] Security context reset completed successfully.'
+      ]);
+      setWipeInProcess(false);
+      setShowWipeConfirm(false);
+      setActiveTab('home');
+      addConsoleLog('VOLATILE CACHED VAULT WIPED COMPLETELY');
+    }, 3500);
+  }, [addConsoleLog]);
+
+  // Replay Boot Animation
+  const handleReplayBoot = React.useCallback(() => {
+    setBootLogs([]);
+    setBootIndex(0);
+    setBootProgress(0);
+    setIsLoading(true);
+  }, []);
+
+  // Dynamic runtime tickers and mounting triggers
+  React.useEffect(() => {
+    if (isLoading) return;
+    const interval = setInterval(() => {
+      setSessionUptime((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isLoading]);
+
+  React.useEffect(() => {
+    if (!isLoading && !activePassword) {
+      const timer = setTimeout(() => {
+        const initialPwd = generateSecurePassword(10);
+        setActivePassword(initialPwd);
+        setTotalGeneratedCount(1);
+        
+        const now = new Date();
+        const timeStr = `${now.getFullYear()}.${(now.getMonth()+1).toString().padStart(2, '0')}.${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+        
+        const entropy = calculateCustomEntropy(initialPwd);
+        const strengthRating = getCustomStrength(entropy).text;
+
+        setRecentLogs([
+          {
+            id: Math.random().toString(36).substr(2, 9),
+            timestamp: timeStr,
+            sequence: initialPwd,
+            revealed: false,
+            strength: strengthRating,
+          }
+        ]);
+
+        setConsoleLogs([
+          `[${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}] [SYSTEM] Secure HSM vault partition detected online`,
+          `[${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}] [SECURITY] Crypto-coprocessor initialized under FIPS-140-2 guidelines`,
+          `[${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}] [INFO] Generated initial 10-character seed passkey via CSPRNG`
+        ]);
+      }, 0);
+ 
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, activePassword, generateSecurePassword, calculateCustomEntropy, getCustomStrength]);
+ 
   // Simulated Terminal Booting Process
   const BOOT_MESSAGES = React.useMemo(() => [
-    'Connecting to remote node (HK_77)...',
-    'Handshaking TLS v1.3 with client host...',
-    'Establishing secure sandbox channel [ID: 0x82FA]...',
-    'Verifying Root SHA-512 authentication signatures...',
-    'Loading custom cryptographic seed tables...',
-    'Mounting PassForge physical hardware vault...',
-    'Performing hardware entropy collection...',
-    'Starting secure hardware random seed engines...',
-    'Ready. PassForge system interface operational.',
+    '[SYSTEM] Contacting decentralized core node HK-77_SECURE...',
+    '[NETWORK] TLS v1.3 cryptographic handshake established with client host',
+    '[SECURITY] Secure sandbox memory container initialized [ID: 0x82FA]',
+    '[SECURITY] Root SHA-512 authentication signatures verified',
+    '[CIPHER] Loading high-entropy CSPRNG seed tables',
+    '[HARDWARE] Mounting secure physical HSM vault partition',
+    '[HARDWARE] Executing localized thermal noise hardware entropy harvesting',
+    '[SYSTEM] Secure hardware CSPRNG random seed generator engines operational',
+    '[INFO] Secure PassForge enterprise system gateway fully online',
   ], []);
 
   React.useEffect(() => {
@@ -326,22 +474,20 @@ export default function PassForgeApp() {
   React.useEffect(() => {
     if (isLoading) return;
     const interval = setInterval(() => {
-      const logTypes = ['SYS', 'SEC', 'EVT', 'LOG'];
       const actions = [
-        'INTEGRITY_CHECK // CRITICAL // OK',
-        'ENTROPY_RE-SEED_COMPLETED',
-        'CLEARED_EXPIRED_SESSION_BUFFERS',
-        'SYNCED_METRICS_WITH_SECURE_REMOTE',
-        'HEARTBEAT_PULSE_DETECTED',
-        'VOLATILE_CACHE_WIPED'
+        '[SYSTEM] Periodic integrity validation: ALL_SYSTEMS_COMPLIANT',
+        '[CIPHER] Executing dynamic seed pool re-harvesting & hashing',
+        '[SECURITY] Flushing expired sandbox memory context allocations',
+        '[NETWORK] Synced local epoch counters with atomic node clocks',
+        '[SYSTEM] Heartbeat response from remote vault partition HK-77',
+        '[AUDIT] Log files checked and encrypted under AES-256-GCM block'
       ];
-      const type = logTypes[Math.floor(Math.random() * logTypes.length)];
       const action = actions[Math.floor(Math.random() * actions.length)];
       const now = new Date();
       const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
       
       setConsoleLogs((prev) => {
-        const nextLogs = [...prev, `[${timeStr}] ${type}: ${action}`];
+        const nextLogs = [...prev, `[${timeStr}] ${action}`];
         if (nextLogs.length > 30) nextLogs.shift();
         return nextLogs;
       });
@@ -702,24 +848,31 @@ export default function PassForgeApp() {
                           {/* Giant display block */}
                           <div className="relative bg-black/60 border border-white/5 hover:border-red-500/20 p-6 md:p-8 rounded-lg flex items-center justify-between gap-4 transition-all">
                             <span className="font-mono text-xl md:text-3xl font-bold tracking-wider text-white break-all pr-12 select-all">
-                              {PASSWORD_PRESETS[currentPresetIndex].sequence}
+                              {activePassword || 'AWAITING GENERATION'}
                             </span>
                             <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
                               {/* Entropy label micro details */}
                               <div className="hidden md:flex flex-col items-end mr-2 font-mono">
                                 <span className="text-[9px] text-[#8B8B8B] tracking-widest uppercase">STRENGTH</span>
-                                <span className="text-[10px] text-emerald-400 font-bold tracking-wider">{PASSWORD_PRESETS[currentPresetIndex].strength}</span>
+                                <span className={`text-[10px] font-bold tracking-wider ${
+                                  activePassword 
+                                    ? getCustomStrength(calculateCustomEntropy(activePassword)).color 
+                                    : 'text-zinc-500'
+                                }`}>
+                                  {activePassword ? getCustomStrength(calculateCustomEntropy(activePassword)).text : 'NONE'}
+                                </span>
                               </div>
                               {/* Copy button */}
                               <button
                                 id="btn-copy-home-password"
-                                onClick={() => handleCopyValue(PASSWORD_PRESETS[currentPresetIndex].sequence)}
+                                onClick={() => handleCopyValue(activePassword)}
                                 className={`p-3 rounded border bg-[#111111] hover:bg-white/5 transition-all relative ${
                                   copiedNotification 
                                     ? 'border-emerald-500/50 text-emerald-400' 
                                     : 'border-white/10 text-white/60 hover:text-white'
                                 }`}
                                 title="Copy passphrase stream"
+                                disabled={!activePassword}
                               >
                                 {copiedNotification ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                               </button>
@@ -730,15 +883,15 @@ export default function PassForgeApp() {
                           <div className="space-y-2">
                             <div className="flex justify-between items-center font-mono text-[10px]">
                               <span className="text-[#8B8B8B] tracking-wider">SHANNON ENTROPY DEPTH:</span>
-                              <span className="text-white font-bold">{PASSWORD_PRESETS[currentPresetIndex].entropy}% // STABLE</span>
+                              <span className="text-white font-bold">{activePassword ? calculateCustomEntropy(activePassword) : 0} BITS // STABLE</span>
                             </div>
                             
                             {/* Visual block segments, mimicking high-end UI */}
                             <div className="grid grid-cols-8 gap-1 h-3">
                               {Array.from({ length: 8 }).map((_, i) => {
-                                const fillPercentage = PASSWORD_PRESETS[currentPresetIndex].entropy;
-                                const blockPercentage = ((i + 1) / 8) * 100;
-                                const isActive = fillPercentage >= blockPercentage;
+                                const activeEntropy = activePassword ? calculateCustomEntropy(activePassword) : 0;
+                                const blocksToFill = getCustomStrength(activeEntropy).blocks;
+                                const isActive = i < blocksToFill;
                                 return (
                                   <div
                                     key={i}
@@ -758,10 +911,13 @@ export default function PassForgeApp() {
                             <button
                               id="btn-generate-sequence"
                               onClick={triggerGenerateSequence}
-                              className={`px-5 py-2.5 bg-transparent border border-red-500/30 hover:border-[#FF2D2D] hover:bg-[#FF2D2D] text-white hover:text-white text-xs font-mono font-bold tracking-widest rounded transition-all flex items-center gap-2 cursor-pointer`}
+                              disabled={isGenerating}
+                              className={`px-5 py-2.5 bg-transparent border border-red-500/30 hover:border-[#FF2D2D] hover:bg-[#FF2D2D] text-white hover:text-white text-xs font-mono font-bold tracking-widest rounded transition-all flex items-center gap-2 ${
+                                isGenerating ? 'opacity-55 cursor-not-allowed' : 'cursor-pointer'
+                              }`}
                             >
-                              <RefreshCw className="w-3.5 h-3.5" />
-                              GENERATE NEW SEQUENCE // ALT+G
+                              <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />
+                              {isGenerating ? 'GENERATING SECURE STREAM...' : 'GENERATE NEW SEQUENCE // ALT+G'}
                             </button>
                             <button
                               id="btn-goto-generator"
@@ -779,20 +935,31 @@ export default function PassForgeApp() {
                         <div className="bg-[#0B0B0B] border border-white/5 rounded-lg p-4 font-mono">
                           <span className="text-[9px] text-[#8B8B8B] tracking-widest uppercase block mb-1">SYSTEM_UPTIME</span>
                           <div className="text-xl font-bold text-white flex items-center gap-1.5">
-                            99.9999%
+                            {(() => {
+                              const hrs = Math.floor(sessionUptime / 3600).toString().padStart(2, '0');
+                              const mins = Math.floor((sessionUptime % 3600) / 60).toString().padStart(2, '0');
+                              const secs = (sessionUptime % 60).toString().padStart(2, '0');
+                              return `${hrs}:${mins}:${secs}`;
+                            })()}
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
                           </div>
-                          <span className="text-[9px] text-emerald-400 font-bold tracking-wider block mt-1 uppercase">ACTIVE_NODE_01 // SECURE</span>
+                          <span className="text-[9px] text-emerald-400 font-bold tracking-wider block mt-1 uppercase">DYNAMIC SESSION RUNTIME</span>
                         </div>
                         <div className="bg-[#0B0B0B] border border-white/5 rounded-lg p-4 font-mono">
                           <span className="text-[9px] text-[#8B8B8B] tracking-widest uppercase block mb-1">TOTAL_GENERATED</span>
-                          <div className="text-xl font-bold text-white">42,801</div>
-                          <span className="text-[9px] text-white/40 block mt-1 uppercase">SYNCED_WITH_CLOUD_MIRROR</span>
+                          <div className="text-xl font-bold text-white">{totalGeneratedCount}</div>
+                          <span className="text-[9px] text-white/40 block mt-1 uppercase">DYNAMIC_VAULT_COUNTER</span>
                         </div>
                         <div className="bg-[#0B0B0B] border border-white/5 rounded-lg p-4 font-mono">
                           <span className="text-[9px] text-[#8B8B8B] tracking-widest uppercase block mb-1">SECURITY_SCORE</span>
-                          <div className="text-xl font-bold text-emerald-400">A+ EXCELLENT</div>
-                          <span className="text-[9px] text-white/40 block mt-1 uppercase">ZERO_LEAKS_DETECTED // 0xFA</span>
+                          <div className={`text-xl font-bold ${
+                            activePassword 
+                              ? getCustomStrength(calculateCustomEntropy(activePassword)).color 
+                              : 'text-zinc-500'
+                          }`}>
+                            {activePassword ? getCustomStrength(calculateCustomEntropy(activePassword)).text : 'NONE'}
+                          </div>
+                          <span className="text-[9px] text-white/40 block mt-1 uppercase">DYNAMIC_STRENGTH_EVALUATION</span>
                         </div>
                       </div>
 
@@ -946,24 +1113,25 @@ export default function PassForgeApp() {
                           <div className="bg-black/60 border border-white/5 hover:border-red-500/10 p-6 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all relative">
                             <div>
                               <div className="font-mono text-2xl md:text-3xl font-extrabold tracking-wider text-white break-all select-all">
-                                {PASSWORD_PRESETS[currentPresetIndex].sequence}
+                                {activePassword || 'AWAITING GENERATION'}
                               </div>
                               <div className="flex gap-4 mt-2 font-mono text-[9px] text-[#C7C7C7]">
-                                <span className="uppercase">LENGTH: <b className="text-white">{PASSWORD_PRESETS[currentPresetIndex].sequence.length} chars</b></span>
+                                <span className="uppercase">LENGTH: <b className="text-white">{activePassword ? activePassword.length : 0} chars</b></span>
                                 <span>{"//"}</span>
-                                <span className="uppercase">TYPE: <b className="text-white">{PASSWORD_PRESETS[currentPresetIndex].type}</b></span>
+                                <span className="uppercase">TYPE: <b className="text-white">Secure Alphanumeric Token</b></span>
                               </div>
                             </div>
 
                             <div className="flex gap-2">
                               <button
                                 id="btn-copy-generator-password"
-                                onClick={() => handleCopyValue(PASSWORD_PRESETS[currentPresetIndex].sequence)}
+                                onClick={() => handleCopyValue(activePassword)}
                                 className={`px-4 py-2.5 rounded border text-xs font-mono tracking-wider flex items-center gap-1.5 transition-all ${
                                   copiedNotification 
                                     ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400' 
                                     : 'bg-[#111111] border-white/10 text-white/80 hover:bg-white/5'
                                 }`}
+                                disabled={!activePassword}
                               >
                                 {copiedNotification ? (
                                   <>
@@ -977,13 +1145,16 @@ export default function PassForgeApp() {
                                   </>
                                 )}
                               </button>
-                              <button
+                               <button
                                 id="btn-refresh-generator-password"
                                 onClick={triggerGenerateSequence}
-                                className="p-2.5 rounded border border-white/10 bg-[#111111] text-white/80 hover:text-white hover:bg-white/5 transition-all"
+                                disabled={isGenerating}
+                                className={`p-2.5 rounded border border-white/10 bg-[#111111] text-white/80 hover:text-white hover:bg-white/5 transition-all ${
+                                  isGenerating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                                }`}
                                 title="Regenerate seed"
                               >
-                                <RefreshCw className="w-4 h-4" />
+                                <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
                               </button>
                             </div>
                           </div>
@@ -992,17 +1163,27 @@ export default function PassForgeApp() {
                           <div className="bg-black p-4 rounded border border-white/5 grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div className="font-mono space-y-1">
                               <span className="text-[9px] text-[#8B8B8B] tracking-widest uppercase">SHANNON ENTROPY METER</span>
-                              <div className={`text-lg font-bold ${colors.text}`}>{PASSWORD_PRESETS[currentPresetIndex].entropy} BITS</div>
+                              <div className={`text-lg font-bold ${colors.text}`}>
+                                {activePassword ? calculateCustomEntropy(activePassword) : 0} BITS
+                              </div>
                               <div className="text-[9px] text-zinc-500 uppercase">MATHEMATICAL COMPLEXITY SCORE</div>
                             </div>
                             <div className="font-mono space-y-1">
                               <span className="text-[9px] text-[#8B8B8B] tracking-widest uppercase">ESTIMATED CRACK TIME</span>
-                              <div className="text-lg font-bold text-white">~4.8 BILLION YEARS</div>
+                              <div className="text-lg font-bold text-white">
+                                {activePassword ? estimateCrackTime(calculateCustomEntropy(activePassword)) : 'INSTANT'}
+                              </div>
                               <div className="text-[9px] text-zinc-500 uppercase">BRUTE-FORCE RESISTANCE DEPTH</div>
                             </div>
                             <div className="font-mono space-y-1">
                               <span className="text-[9px] text-[#8B8B8B] tracking-widest uppercase">CRYPTOGRAPHIC CLASSIFICATION</span>
-                              <div className="text-lg font-bold text-emerald-400">{PASSWORD_PRESETS[currentPresetIndex].strength}</div>
+                              <div className={`text-lg font-bold ${
+                                activePassword 
+                                  ? getCustomStrength(calculateCustomEntropy(activePassword)).color 
+                                  : 'text-zinc-500'
+                              }`}>
+                                {activePassword ? getCustomStrength(calculateCustomEntropy(activePassword)).text : 'NONE'}
+                              </div>
                               <div className="text-[9px] text-zinc-500 uppercase">SECURITY BOUNDS COMPLIANCE</div>
                             </div>
                           </div>
@@ -1140,7 +1321,7 @@ export default function PassForgeApp() {
                             </div>
                             <input 
                               type="range" 
-                              min="12" 
+                              min="6" 
                               max="64" 
                               value={entropyLength}
                               onChange={(e) => {
@@ -1150,8 +1331,8 @@ export default function PassForgeApp() {
                               className="w-full accent-red-500 cursor-ew-resize bg-white/10 rounded h-1" 
                             />
                             <div className="flex justify-between text-[9px] text-white/30">
-                              <span>12_CHARS (MIN)</span>
-                              <span>32_CHARS (RECOMMENDED)</span>
+                              <span>6_CHARS (MIN)</span>
+                              <span>10_CHARS (DEFAULT)</span>
                               <span>64_CHARS (VAULT_LIMIT)</span>
                             </div>
                           </div>
@@ -1198,16 +1379,16 @@ export default function PassForgeApp() {
                               />
                             </label>
 
-                            <label className="flex items-center justify-between p-3 rounded bg-black/40 border border-white/5 hover:border-white/10 cursor-pointer transition-all">
+                            <label className="flex items-center justify-between p-3 rounded bg-black/40 border border-white/5 opacity-50 cursor-not-allowed select-none">
                               <div className="font-mono">
-                                <div className="text-xs text-white tracking-wider">Include Special Symbols (!@#$)</div>
-                                <div className="text-[9px] text-[#8B8B8B] uppercase">ASCII CHARACTER CHARTS</div>
+                                <div className="text-xs text-zinc-400 tracking-wider">Include Special Symbols (!@#$)</div>
+                                <div className="text-[9px] text-red-500 uppercase font-bold">LOCKED // ALPHANUMERIC ONLY</div>
                               </div>
                               <input 
                                 type="checkbox" 
-                                checked={genOpts.symbols} 
-                                onChange={(e) => setGenOpts({...genOpts, symbols: e.target.checked})}
-                                className="rounded bg-[#111111] border-white/10 text-red-500 focus:ring-0 cursor-pointer"
+                                checked={false} 
+                                disabled
+                                className="rounded bg-[#111111] border-white/10 text-red-500 focus:ring-0 cursor-not-allowed"
                               />
                             </label>
 
@@ -1224,16 +1405,16 @@ export default function PassForgeApp() {
                               />
                             </label>
 
-                            <label className="flex items-center justify-between p-3 rounded bg-black/40 border border-white/5 hover:border-white/10 cursor-pointer transition-all">
+                            <label className="flex items-center justify-between p-3 rounded bg-black/40 border border-white/5 opacity-50 cursor-not-allowed select-none">
                               <div className="font-mono">
-                                <div className="text-xs text-white tracking-wider">Pronounceable Passphrase</div>
-                                <div className="text-[9px] text-[#8B8B8B] uppercase">MEMORABLE ALGORITHMIC CHAINS</div>
+                                <div className="text-xs text-zinc-400 tracking-wider">Pronounceable Passphrase</div>
+                                <div className="text-[9px] text-red-500 uppercase font-bold">LOCKED // ALPHANUMERIC ONLY</div>
                               </div>
                               <input 
                                 type="checkbox" 
-                                checked={genOpts.pronounceable} 
-                                onChange={(e) => setGenOpts({...genOpts, pronounceable: e.target.checked})}
-                                className="rounded bg-[#111111] border-white/10 text-red-500 focus:ring-0 cursor-pointer"
+                                checked={false} 
+                                disabled
+                                className="rounded bg-[#111111] border-white/10 text-red-500 focus:ring-0 cursor-not-allowed"
                               />
                             </label>
 
@@ -1861,6 +2042,22 @@ export default function PassForgeApp() {
               </footer>
 
             </main>
+ 
+            {/* TOAST SYSTEM NOTIFICATION */}
+            <AnimatePresence>
+              {toast.visible && (
+                <motion.div 
+                  className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-[#0D0D11]/95 border border-emerald-500/30 p-4 rounded-lg shadow-[0_4px_24px_rgba(16,185,129,0.12)] font-mono text-xs text-white backdrop-blur-md"
+                  initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                  <span className="tracking-widest font-bold uppercase">{toast.message}</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* WIPE DIALOG / WARNING MODAL OVERLAY */}
             <AnimatePresence>
