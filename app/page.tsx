@@ -194,14 +194,16 @@ export default function PassForgeApp() {
   }, []);
 
   const toggleTheme = () => {
-    const nextTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(nextTheme);
-    localStorage.setItem('passforge_theme', nextTheme);
-    if (nextTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    setTheme((prevTheme) => {
+      const nextTheme = prevTheme === 'light' ? 'dark' : 'light';
+      localStorage.setItem('passforge_theme', nextTheme);
+      if (nextTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      return nextTheme;
+    });
   };
 
   // Close overflow menu on outside click
@@ -599,9 +601,17 @@ export default function PassForgeApp() {
           </div>
         </section>
 
-        {/* Footer info */}
-        <footer className="text-center text-xs text-[#6B7280] dark:text-[#6B7280] pt-4 pb-2">
-          PassForge • Client-Side Cryptographic Security
+        {/* Subtle Product Branding Footer */}
+        <footer className="text-center text-[11px] uppercase tracking-[0.2em] text-[#6B7280] dark:text-[#6B7280] py-12 sm:py-16">
+          DEVELOPED BY{' '}
+          <a
+            href="https://muhammad-musthafa-web-dev-portfolio.vercel.app/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-[#111111] dark:hover:text-[#FFFFFF] transition-colors focus-visible:outline-none focus-visible:underline"
+          >
+            MUSTHAFA
+          </a>
         </footer>
 
       </div>
