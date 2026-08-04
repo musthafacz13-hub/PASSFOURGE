@@ -1,500 +1,761 @@
 'use client';
 
-import React from 'react';
-import { Eye, EyeOff, Copy, RefreshCw, Check } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  MoreVertical, 
+  Eye, 
+  EyeOff, 
+  Copy, 
+  Check, 
+  Sparkles, 
+  Sliders, 
+  ExternalLink, 
+  X,
+  Sun,
+  Moon
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 // ==========================================
-// COMPACT DYNAMIC CRYPTOGRAPHIC ENGINES
+// PASSWORD CRYPTOGRAPHIC ENGINE & ANALYSIS
 // ==========================================
 
-interface AnalysisResult {
-  strength: 'Very Weak' | 'Weak' | 'Medium' | 'Strong' | 'Very Strong';
-  crackTime: string;
-  explanation: string;
+interface GeneratorOptions {
+  length: number;
+  useUpper: boolean;
+  useLower: boolean;
+  useNumbers: boolean;
+  useSymbols: boolean;
 }
 
-/**
- * Calculates local Shannon-inspired password entropy and brute-force resistance.
- */
-function analyzePassword(password: string): AnalysisResult {
+interface SecurityAnalysis {
+  strength: 'Weak' | 'Moderate' | 'Strong' | 'Very Strong';
+  crackTime: string;
+  entropyBits: number;
+}
+
+function generateSecurePassword(options: GeneratorOptions): string {
+  const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const lower = 'abcdefghijklmnopqrstuvwxyz';
+  const numbers = '0123456789';
+  const symbols = '!@#$%^&*()_+-=[]{}|;:,.<>?';
+
+  let charPool = '';
+  if (options.useUpper) charPool += upper;
+  if (options.useLower) charPool += lower;
+  if (options.useNumbers) charPool += numbers;
+  if (options.useSymbols) charPool += symbols;
+
+  if (!charPool) charPool = lower + numbers; // fallback
+
+  // Ensure at least one character from each selected set
+  const requiredChars: string[] = [];
+  if (options.useUpper) requiredChars.push(upper[Math.floor(Math.random() * upper.length)]);
+  if (options.useLower) requiredChars.push(lower[Math.floor(Math.random() * lower.length)]);
+  if (options.useNumbers) requiredChars.push(numbers[Math.floor(Math.random() * numbers.length)]);
+  if (options.useSymbols) requiredChars.push(symbols[Math.floor(Math.random() * symbols.length)]);
+
+  const result: string[] = [...requiredChars];
+
+  // Fill remaining length
+  while (result.length < options.length) {
+    const randomIndex = Math.floor(Math.random() * charPool.length);
+    result.push(charPool[randomIndex]);
+  }
+
+  // Shuffle array using Fisher-Yates
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+
+  return result.slice(0, options.length).join('');
+}
+
+function analyzePasswordSecurity(password: string): SecurityAnalysis {
   if (!password) {
     return {
-      strength: 'Very Weak',
-      crackTime: 'Instantly',
-      explanation: 'Type your current password to begin the security analysis.',
+      strength: 'Weak',
+      crackTime: 'Instant',
+      entropyBits: 0,
     };
   }
 
-  const len = password.length;
-  const hasLower = /[a-z]/.test(password);
-  const hasUpper = /[A-Z]/.test(password);
-  const hasNumber = /[0-9]/.test(password);
-  const hasSymbol = /[^a-zA-Z0-9]/.test(password);
-
-  // Pool size calculation
   let poolSize = 0;
-  if (hasLower) poolSize += 26;
-  if (hasUpper) poolSize += 26;
-  if (hasNumber) poolSize += 10;
-  if (hasSymbol) poolSize += 32;
+  if (/[a-z]/.test(password)) poolSize += 26;
+  if (/[A-Z]/.test(password)) poolSize += 26;
+  if (/[0-9]/.test(password)) poolSize += 10;
+  if (/[^a-zA-Z0-9]/.test(password)) poolSize += 32;
 
-  // Standard pool-based entropy
-  const log2Pool = poolSize > 0 ? Math.log(poolSize) / Math.log(2) : 0;
-  const baseEntropy = len * log2Pool;
+  if (poolSize === 0) poolSize = 26;
 
-  // Uniqueness discount to prevent repetitions
-  const uniqueChars = new Set(password).size;
-  const uniquenessRatio = len > 0 ? uniqueChars / len : 0;
-
-  // Consecutive identical character penalty
-  let consecutives = 0;
-  for (let i = 0; i < len - 1; i++) {
-    if (password[i] === password[i + 1]) {
-      consecutives++;
-    }
-  }
-
-  // Adjust entropy based on characteristics
-  let entropy = baseEntropy;
-  if (len > 1) {
-    const uniqueFactor = 0.35 + 0.65 * uniquenessRatio;
-    const consecPenalty = Math.max(0.6, 1.0 - (consecutives / len) * 0.5);
-    entropy = baseEntropy * uniqueFactor * consecPenalty;
-  }
-
-  entropy = Math.max(0, entropy);
-
-  // Check for common vulnerable credentials
-  const commonPasswords = [
-    'password', 'qwerty', '123456', '12345678', '123456789', '12345', 
-    '1234567', 'welcome', 'letmein', 'monkey', 'dragon', 'admin'
-  ];
-  const lowerPwd = password.toLowerCase();
-  const isCommon = commonPasswords.some(common => lowerPwd.includes(common));
-  if (isCommon) {
-    entropy = Math.min(entropy, 15);
-  }
-
-  // Categories & Scores mapping
-  let strength: 'Very Weak' | 'Weak' | 'Medium' | 'Strong' | 'Very Strong' = 'Very Weak';
-
-  if (entropy >= 75 && len >= 12) {
-    strength = 'Very Strong';
-  } else if (entropy >= 50 && len >= 9) {
-    strength = 'Strong';
-  } else if (entropy >= 30 && len >= 7) {
-    strength = 'Medium';
-  } else if (entropy >= 12 && len >= 5) {
-    strength = 'Weak';
-  } else {
-    strength = 'Very Weak';
-  }
-
-  // Attacker guesses-per-second capability profile (consumer/advanced GPU rig)
-  const guessesPerSecond = 1e10; 
-  const searchSpace = Math.pow(2, entropy);
-  const secondsToCrack = searchSpace / guessesPerSecond;
+  const entropy = password.length * Math.log2(poolSize);
+  const guessesPerSecond = 1e11; // 100 billion guesses/sec
+  const combinations = Math.pow(2, entropy);
+  const secondsToCrack = combinations / guessesPerSecond;
 
   let crackTime = '';
-
-  const SEC_MINUTE = 60;
-  const SEC_HOUR = 3600;
-  const SEC_DAY = 86400;
-  const SEC_MONTH = 86400 * 30;
-  const SEC_YEAR = 86400 * 365;
-
   if (secondsToCrack < 1) {
-    crackTime = 'Instantly';
-  } else if (secondsToCrack < SEC_MINUTE) {
-    crackTime = 'Instantly';
-  } else if (secondsToCrack < SEC_HOUR) {
-    crackTime = 'Minutes';
-  } else if (secondsToCrack < SEC_DAY) {
-    crackTime = 'Hours';
-  } else if (secondsToCrack < SEC_MONTH) {
-    crackTime = 'Days';
-  } else if (secondsToCrack < SEC_YEAR) {
-    crackTime = 'Months';
-  } else if (secondsToCrack < 1000 * SEC_YEAR) {
-    crackTime = 'Years';
-  } else if (secondsToCrack < 1000000 * SEC_YEAR) {
-    crackTime = 'Thousands of years';
+    crackTime = 'Instant';
+  } else if (secondsToCrack < 60) {
+    crackTime = `${Math.round(secondsToCrack)} Seconds`;
+  } else if (secondsToCrack < 3600) {
+    crackTime = `${Math.round(secondsToCrack / 60)} Minutes`;
+  } else if (secondsToCrack < 86400) {
+    crackTime = `${Math.round(secondsToCrack / 3600)} Hours`;
+  } else if (secondsToCrack < 31536000) {
+    crackTime = `${Math.round(secondsToCrack / 86400)} Days`;
+  } else if (secondsToCrack < 31536000000) {
+    crackTime = `${Math.round(secondsToCrack / 31536000)} Years`;
+  } else if (secondsToCrack < 3153600000000) {
+    crackTime = `${Math.round(secondsToCrack / 31536000000)} Centuries`;
   } else {
-    crackTime = 'Millions of years';
+    crackTime = 'Millions of Years';
   }
 
-  // Premium short non-technical explanations
-  let explanation = '';
-  if (isCommon) {
-    explanation = 'This is a widely recognized password easily guessed by standard automated scripts.';
-  } else if (len < 6) {
-    explanation = 'Your password is short and lacks variety of character sets.';
-  } else if (uniquenessRatio < 0.45) {
-    explanation = 'Character repetition makes this password predictable for targeted brute-forcing.';
-  } else if (poolSize <= 26) {
-    explanation = 'Using only a single character set makes this easy to calculate.';
-  } else if (strength === 'Medium') {
-    explanation = 'Fair strength, but vulnerable to advanced dictionary matching algorithms.';
-  } else if (strength === 'Strong') {
-    explanation = 'Excellent length and character diversity provide robust security.';
-  } else if (strength === 'Very Strong') {
-    explanation = 'Outstanding password length and high randomness guarantee ultimate protection.';
-  } else {
-    explanation = 'A short length and lack of unique character types reduce overall safety.';
+  let strength: 'Weak' | 'Moderate' | 'Strong' | 'Very Strong' = 'Weak';
+  if (entropy >= 80) {
+    strength = 'Very Strong';
+  } else if (entropy >= 55) {
+    strength = 'Strong';
+  } else if (entropy >= 35) {
+    strength = 'Moderate';
   }
 
-  return { strength, crackTime, explanation };
-}
-
-/**
- * Supercharges user's password, generating a much stronger version inspired by the original base.
- */
-function generateStrongFromOriginal(original: string): string {
-  if (!original) {
-    // Generate a clean random 16 character strong password
-    const lower = 'abcdefghijklmnopqrstuvwxyz';
-    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const nums = '0123456789';
-    const syms = '!@#$%^&*()';
-    const all = lower + upper + nums + syms;
-
-    let pwd = '';
-    // Seed with guaranteed character groups
-    pwd += lower[Math.floor(Math.random() * lower.length)];
-    pwd += upper[Math.floor(Math.random() * upper.length)];
-    pwd += nums[Math.floor(Math.random() * nums.length)];
-    pwd += syms[Math.floor(Math.random() * syms.length)];
-
-    for (let i = 4; i < 16; i++) {
-      pwd += all[Math.floor(Math.random() * all.length)];
-    }
-    return pwd.split('').sort(() => Math.random() - 0.5).join('');
-  }
-
-  const clean = original.trim().replace(/\s+/g, '');
-  
-  // Extract seed prefix
-  const baseLength = Math.min(6, Math.max(3, Math.floor(clean.length / 2)));
-  let prefix = clean.substring(0, baseLength);
-
-  // Apply subtle predictable character transformations
-  let stylized = '';
-  const substitutions: Record<string, string> = {
-    'a': '@', 'A': '@',
-    'e': '3', 'E': '3',
-    'i': '1', 'I': '1',
-    'o': '0', 'O': '0',
-    's': '$', 'S': '$',
-    't': '7', 'T': '7'
+  return {
+    strength,
+    crackTime,
+    entropyBits: Math.round(entropy),
   };
-
-  for (let i = 0; i < prefix.length; i++) {
-    const char = prefix[i];
-    if (substitutions[char] && Math.random() < 0.6) {
-      stylized += substitutions[char];
-    } else {
-      stylized += char;
-    }
-  }
-
-  // Generate strong secondary entropy blocks
-  const lower = 'abcdefghijklmnopqrstuvwxyz';
-  const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const nums = '0123456789';
-  const syms = '!@#$%^&*()';
-  const all = lower + upper + nums + syms;
-
-  let suffix = '';
-  suffix += upper[Math.floor(Math.random() * upper.length)];
-  suffix += nums[Math.floor(Math.random() * nums.length)];
-  suffix += syms[Math.floor(Math.random() * syms.length)];
-
-  const paddingLength = Math.max(8, 16 - stylized.length - 1);
-  for (let i = 3; i < paddingLength; i++) {
-    suffix += all[Math.floor(Math.random() * all.length)];
-  }
-
-  // Shuffle suffix block
-  const shuffledSuffix = suffix.split('').sort(() => Math.random() - 0.5).join('');
-
-  // Separator
-  const separators = ['.', '_', '-', '#', '$'];
-  const separator = separators[Math.floor(Math.random() * separators.length)];
-
-  return `${stylized}${separator}${shuffledSuffix}`;
 }
 
-// ==========================================
-// MAIN COMPONENT
-// ==========================================
+const ALL_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?';
 
-export default function Page() {
-  const [currentPassword, setCurrentPassword] = React.useState<string>('');
-  const [showPassword, setShowPassword] = React.useState<boolean>(false);
-  const [suggestedPassword, setSuggestedPassword] = React.useState<string>('pK7_zR9q$Y2mNx5a');
-  const [copiedCurrent, setCopiedCurrent] = React.useState<boolean>(false);
-  const [copiedSuggested, setCopiedSuggested] = React.useState<boolean>(false);
-  const [srAnnouncement, setSrAnnouncement] = React.useState<string>('');
+export default function PassForgeApp() {
+  // Options state
+  const [options, setOptions] = useState<GeneratorOptions>({
+    length: 16,
+    useUpper: true,
+    useLower: true,
+    useNumbers: true,
+    useSymbols: true,
+  });
 
-  // Initialize unique suggested password on mount securely
-  React.useEffect(() => {
+  // Password states
+  const [actualPassword, setActualPassword] = useState<string>('');
+  const [displayedPassword, setDisplayedPassword] = useState<string>('');
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [showPassword, setShowPassword] = useState<boolean>(true);
+  const [showCustomize, setShowCustomize] = useState<boolean>(false);
+
+  // Copy toast state
+  const [showToast, setShowToast] = useState<boolean>(false);
+
+  // Navigation menu & modal states
+  const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
+  const [activeModal, setActiveModal] = useState<'about' | 'why' | 'privacy' | 'developer' | null>(null);
+
+  // Theme state
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  // Animation timer ref
+  const animIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Screen reader announcement
+  const [srAnnouncement, setSrAnnouncement] = useState<string>('');
+
+  // Initial Theme Setup & Hydration-safe initial generation
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('passforge_theme');
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const initialTheme = savedTheme === 'dark' || (!savedTheme && prefersDark) ? 'dark' : 'light';
+    
+    if (initialTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+
     const timer = setTimeout(() => {
-      setSuggestedPassword(generateStrongFromOriginal(''));
+      setTheme(initialTheme);
+      const initPwd = generateSecurePassword({
+        length: 16,
+        useUpper: true,
+        useLower: true,
+        useNumbers: true,
+        useSymbols: true,
+      });
+      setActualPassword(initPwd);
+      setDisplayedPassword(initPwd);
     }, 0);
+
     return () => clearTimeout(timer);
   }, []);
 
-  // Update suggested password automatically when current changes
-  const handleCurrentPasswordChange = (val: string) => {
-    setCurrentPassword(val);
-    setSuggestedPassword(generateStrongFromOriginal(val));
-    setCopiedCurrent(false);
-  };
-
-  // Handle generation of brand new suggested password
-  const handleGenerateNew = () => {
-    setSuggestedPassword(generateStrongFromOriginal(currentPassword));
-    setCopiedSuggested(false);
-    setSrAnnouncement('New suggested password generated');
-    setTimeout(() => setSrAnnouncement(''), 3000);
-  };
-
-  // Perform calculations
-  const analysis = React.useMemo(() => analyzePassword(currentPassword), [currentPassword]);
-  const suggestedAnalysis = React.useMemo(() => {
-    const res = analyzePassword(suggestedPassword);
-    return {
-      ...res,
-      explanation: 'Longer length and a wider variety of characters make this password significantly stronger.'
-    };
-  }, [suggestedPassword]);
-
-  // Copy password helper
-  const handleCopyText = (text: string, isSuggested: boolean) => {
-    if (!text) return;
-    navigator.clipboard.writeText(text);
-    if (isSuggested) {
-      setCopiedSuggested(true);
-      setSrAnnouncement('Suggested password copied to clipboard');
-      setTimeout(() => {
-        setCopiedSuggested(false);
-        setSrAnnouncement('');
-      }, 2000);
+  const toggleTheme = () => {
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(nextTheme);
+    localStorage.setItem('passforge_theme', nextTheme);
+    if (nextTheme === 'dark') {
+      document.documentElement.classList.add('dark');
     } else {
-      setCopiedCurrent(true);
-      setSrAnnouncement('Current password copied to clipboard');
-      setTimeout(() => {
-        setCopiedCurrent(false);
-        setSrAnnouncement('');
-      }, 2000);
+      document.documentElement.classList.remove('dark');
     }
   };
 
-  // Modern subtle gray strength badges
-  const getBadgeClass = (strength: string) => {
-    switch (strength) {
-      case 'Very Strong':
-        return 'text-zinc-900 bg-zinc-50 border-zinc-300';
-      case 'Strong':
-        return 'text-zinc-800 bg-zinc-50 border-zinc-200';
-      case 'Medium':
-        return 'text-zinc-700 bg-zinc-50 border-zinc-200';
-      case 'Weak':
-        return 'text-zinc-600 bg-zinc-50/80 border-zinc-200/60';
-      case 'Very Weak':
-      default:
-        return 'text-zinc-500 bg-zinc-50/60 border-zinc-200/40';
+  // Close overflow menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Keyboard navigation for escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsMenuOpen(false);
+        setActiveModal(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Premium 1.5s Rolling / Shuffle Password Generation Animation
+  const handleGeneratePassword = (customOptions?: GeneratorOptions) => {
+    if (isGenerating) return;
+
+    const opts = customOptions || options;
+    const targetPwd = generateSecurePassword(opts);
+    setIsGenerating(true);
+
+    if (animIntervalRef.current) {
+      clearInterval(animIntervalRef.current);
     }
+
+    const durationMs = 1600;
+    const intervalMs = 40;
+    const totalSteps = Math.floor(durationMs / intervalMs);
+    let currentStep = 0;
+
+    animIntervalRef.current = setInterval(() => {
+      currentStep++;
+      const progress = currentStep / totalSteps; // 0 to 1
+      const settledCount = Math.floor(progress * targetPwd.length);
+
+      let animString = '';
+      for (let i = 0; i < targetPwd.length; i++) {
+        if (i < settledCount) {
+          animString += targetPwd[i];
+        } else {
+          // Random character from pool
+          const randChar = ALL_CHARS[Math.floor(Math.random() * ALL_CHARS.length)];
+          animString += randChar;
+        }
+      }
+
+      setDisplayedPassword(animString);
+
+      if (currentStep >= totalSteps) {
+        if (animIntervalRef.current) clearInterval(animIntervalRef.current);
+        setActualPassword(targetPwd);
+        setDisplayedPassword(targetPwd);
+        setIsGenerating(false);
+        setSrAnnouncement('New password generated');
+        setTimeout(() => setSrAnnouncement(''), 2000);
+      }
+    }, intervalMs);
   };
+
+  const handleOptionChange = (key: keyof GeneratorOptions, value: number | boolean) => {
+    const newOpts = { ...options, [key]: value };
+    // Ensure at least one set is checked
+    if (!newOpts.useUpper && !newOpts.useLower && !newOpts.useNumbers && !newOpts.useSymbols) {
+      return;
+    }
+    setOptions(newOpts);
+    handleGeneratePassword(newOpts);
+  };
+
+  const handleCopyPassword = () => {
+    if (!actualPassword) return;
+    navigator.clipboard.writeText(actualPassword);
+    setShowToast(true);
+    setSrAnnouncement('Password copied to clipboard');
+    setTimeout(() => {
+      setShowToast(false);
+      setSrAnnouncement('');
+    }, 2000);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setActualPassword(val);
+    setDisplayedPassword(val);
+  };
+
+  const securityAnalysis = analyzePasswordSecurity(actualPassword);
 
   return (
-    <main className="min-h-screen bg-white text-zinc-900 flex flex-col items-center justify-center py-16 px-6 font-sans antialiased">
-      {/* Screen Reader Live Announcement Area */}
+    <main className="min-h-screen bg-[#FFFFFF] dark:bg-[#0B0B0C] text-[#111111] dark:text-[#F3F3F4] font-sans antialiased transition-colors duration-200 selection:bg-zinc-200 dark:selection:bg-zinc-800 flex flex-col justify-between">
+      
+      {/* Accessibility Announcement */}
       <div className="sr-only" aria-live="polite">
         {srAnnouncement}
       </div>
 
-      <div className="max-w-[760px] w-full flex flex-col gap-12">
+      {/* Main Container */}
+      <div className="max-w-[620px] w-full mx-auto px-5 py-10 sm:py-16 flex flex-col gap-10">
         
         {/* ==========================================
-            PLATFORM HEADER
+            TOP NAVIGATION
            ========================================== */}
-        <header className="flex flex-col gap-2">
-          <h1 className="text-xl font-medium tracking-tight text-zinc-900">
-            PassForge
-          </h1>
-          <p className="text-sm text-zinc-500 leading-relaxed font-normal">
-            A premium tool for password strength analysis and high-entropy key recommendations.
-          </p>
+        <header className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-xl font-semibold tracking-tight text-[#111111] dark:text-[#FFFFFF]">
+              PassForge
+            </h1>
+            <p className="text-xs sm:text-sm text-[#6B7280] dark:text-[#9CA3AF] font-normal">
+              Generate secure passwords instantly.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5 pt-0.5">
+            {/* Theme Toggle Button */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-xl text-[#6B7280] hover:text-[#111111] dark:text-[#9CA3AF] dark:hover:text-[#FFFFFF] hover:bg-[#F7F7F8] dark:hover:bg-[#18181B] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 dark:focus-visible:ring-zinc-100"
+              aria-label="Toggle dark and light theme"
+              title="Toggle theme"
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4" />
+              ) : (
+                <Moon className="w-4 h-4" />
+              )}
+            </button>
+
+            {/* Overflow Menu */}
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setIsMenuOpen(prev => !prev)}
+                aria-expanded={isMenuOpen}
+                aria-haspopup="true"
+                aria-label="Options menu"
+                className="p-2 rounded-xl text-[#6B7280] hover:text-[#111111] dark:text-[#9CA3AF] dark:hover:text-[#FFFFFF] hover:bg-[#F7F7F8] dark:hover:bg-[#18181B] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 dark:focus-visible:ring-zinc-100"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+
+              <AnimatePresence>
+                {isMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: -6 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96, y: -6 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    className="absolute right-0 mt-2 w-44 bg-[#FFFFFF] dark:bg-[#141416] border border-[#E5E7EB] dark:border-[#27272A] rounded-[18px] shadow-lg p-1.5 z-50 flex flex-col gap-0.5"
+                  >
+                    <button
+                      onClick={() => { setActiveModal('about'); setIsMenuOpen(false); }}
+                      className="w-full text-left px-3 py-2 text-xs font-medium text-[#111111] dark:text-[#E4E4E7] hover:bg-[#F7F7F8] dark:hover:bg-[#202023] rounded-xl transition-colors focus-visible:outline-none"
+                    >
+                      About
+                    </button>
+                    <button
+                      onClick={() => { setActiveModal('why'); setIsMenuOpen(false); }}
+                      className="w-full text-left px-3 py-2 text-xs font-medium text-[#111111] dark:text-[#E4E4E7] hover:bg-[#F7F7F8] dark:hover:bg-[#202023] rounded-xl transition-colors focus-visible:outline-none"
+                    >
+                      Why this App
+                    </button>
+                    <button
+                      onClick={() => { setActiveModal('privacy'); setIsMenuOpen(false); }}
+                      className="w-full text-left px-3 py-2 text-xs font-medium text-[#111111] dark:text-[#E4E4E7] hover:bg-[#F7F7F8] dark:hover:bg-[#202023] rounded-xl transition-colors focus-visible:outline-none"
+                    >
+                      Privacy
+                    </button>
+                    <button
+                      onClick={() => { setActiveModal('developer'); setIsMenuOpen(false); }}
+                      className="w-full text-left px-3 py-2 text-xs font-medium text-[#111111] dark:text-[#E4E4E7] hover:bg-[#F7F7F8] dark:hover:bg-[#202023] rounded-xl transition-colors focus-visible:outline-none"
+                    >
+                      Developer
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
         </header>
 
         {/* ==========================================
-            MAIN CONTENT WORKSPACE (2-Column Grid)
+            SECTION 1: PASSWORD FIELD & GENERATOR
            ========================================== */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-          
-          {/* LEFT SIDE: Current Password & Analysis */}
-          <div className="flex flex-col gap-6">
+        <section className="flex flex-col gap-4">
+          <div className="bg-[#F7F7F8] dark:bg-[#141416] border border-[#E5E7EB] dark:border-[#27272A] rounded-[18px] p-5 sm:p-6 flex flex-col gap-4 transition-colors">
             
-            {/* SECTION 1: Current Password */}
-            <div className="bg-white border border-[#ECECEC] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.01)]">
-              <div className="flex justify-between items-center mb-4">
-                <label htmlFor="input-pwd" className="text-[11px] font-medium text-zinc-500 uppercase tracking-widest">
-                  Current Password
-                </label>
-              </div>
+            <div className="flex items-center justify-between">
+              <label htmlFor="password-input" className="text-xs font-medium text-[#6B7280] dark:text-[#9CA3AF] uppercase tracking-wider">
+                Password
+              </label>
 
-              <div className="relative flex items-center">
-                <input
-                  id="input-pwd"
-                  type={showPassword ? 'text' : 'password'}
-                  value={currentPassword}
-                  onChange={(e) => handleCurrentPasswordChange(e.target.value)}
-                  placeholder="Type your current password"
-                  className="w-full bg-white border border-[#ECECEC] text-zinc-900 text-sm placeholder-zinc-400 font-mono rounded-lg pl-3 pr-20 py-2.5 focus:outline-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-900 focus-visible:border-zinc-900 transition-all duration-150"
-                />
-                
-                <div className="absolute right-2 flex items-center gap-1">
-                  {currentPassword && (
-                    <button
-                      type="button"
-                      onClick={() => handleCopyText(currentPassword, false)}
-                      className="text-[10px] font-medium text-zinc-500 hover:text-zinc-900 px-2 py-1 rounded hover:bg-zinc-50 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-900"
-                    >
-                      {copiedCurrent ? 'Copied' : 'Copy'}
-                    </button>
+              <button
+                type="button"
+                onClick={() => setShowCustomize(prev => !prev)}
+                className="text-xs text-[#6B7280] hover:text-[#111111] dark:text-[#9CA3AF] dark:hover:text-[#FFFFFF] flex items-center gap-1.5 transition-colors focus-visible:outline-none"
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>{showCustomize ? 'Hide Settings' : 'Customize'}</span>
+              </button>
+            </div>
+
+            {/* Input display field */}
+            <div className="relative flex items-center">
+              <input
+                id="password-input"
+                type={showPassword ? 'text' : 'password'}
+                value={displayedPassword}
+                onChange={handleInputChange}
+                disabled={isGenerating}
+                placeholder="Click generate to create password..."
+                className={`w-full bg-[#FFFFFF] dark:bg-[#0B0B0C] border border-[#E5E7EB] dark:border-[#27272A] text-[#111111] dark:text-[#FFFFFF] text-base font-mono rounded-xl pl-4 pr-24 py-3.5 focus:outline-none focus:ring-2 focus:ring-[#111111] dark:focus:ring-[#FFFFFF] transition-all duration-150 ${
+                  isGenerating ? 'blur-[0.5px] opacity-90 selection:bg-transparent' : ''
+                }`}
+                autoComplete="off"
+                suppressHydrationWarning
+              />
+
+              <div className="absolute right-2 flex items-center gap-1">
+                {/* Toggle Eye */}
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(prev => !prev)}
+                  className="p-2 text-[#6B7280] hover:text-[#111111] dark:text-[#9CA3AF] dark:hover:text-[#FFFFFF] rounded-lg hover:bg-[#F7F7F8] dark:hover:bg-[#18181B] transition-colors focus-visible:outline-none"
+                  aria-label={showPassword ? 'Hide password text' : 'Show password text'}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
                   )}
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(prev => !prev)}
-                    className="text-zinc-400 hover:text-zinc-600 p-1.5 rounded-md hover:bg-zinc-50 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-900"
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="w-3.5 h-3.5" />
-                    ) : (
-                      <Eye className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </div>
+                </button>
+
+                {/* Copy Button */}
+                <button
+                  type="button"
+                  onClick={handleCopyPassword}
+                  className="p-2 text-[#6B7280] hover:text-[#111111] dark:text-[#9CA3AF] dark:hover:text-[#FFFFFF] rounded-lg hover:bg-[#F7F7F8] dark:hover:bg-[#18181B] transition-colors focus-visible:outline-none"
+                  aria-label="Copy password to clipboard"
+                  title="Copy password"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
-            {/* SECTION 2: Password Analysis */}
-            <div className="bg-white border border-[#ECECEC] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.01)] flex flex-col gap-4">
-              <h2 className="text-[11px] font-medium text-zinc-500 uppercase tracking-widest">
-                Password Analysis
-              </h2>
-              
-              <div className="grid grid-cols-2 gap-4 border-b border-zinc-100 pb-4">
-                <div className="space-y-1">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Strength</span>
-                  <span className={`inline-flex items-center text-xs font-normal px-2.5 py-0.5 rounded-md border ${getBadgeClass(analysis.strength)}`}>
-                    {analysis.strength}
-                  </span>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Crack Time</span>
-                  <span className="text-xs font-mono font-normal text-zinc-900">
-                    {analysis.crackTime}
-                  </span>
-                </div>
-              </div>
-
-              <div className="text-xs text-zinc-500 leading-relaxed font-normal">
-                {analysis.explanation}
-              </div>
-            </div>
-
-          </div>
-
-          {/* RIGHT SIDE: Suggested Password & Analysis */}
-          <div className="flex flex-col gap-6">
-            
-            {/* SECTION 3: Suggested Password */}
-            <div className="bg-white border border-[#ECECEC] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.01)]">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-[11px] font-medium text-zinc-500 uppercase tracking-widest">
-                  Suggested Password
-                </h2>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <div className="relative flex items-center bg-zinc-50/40 border border-[#ECECEC] rounded-lg p-3 min-h-[46px]">
-                  <div className="font-mono text-sm text-zinc-800 tracking-wide break-all select-all pr-4">
-                    {suggestedPassword}
+            {/* Customizable Settings Panel */}
+            <AnimatePresence>
+              {showCustomize && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  className="overflow-hidden border-t border-[#E5E7EB] dark:border-[#27272A] pt-4 flex flex-col gap-4"
+                >
+                  {/* Length slider */}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex justify-between text-xs text-[#6B7280] dark:text-[#9CA3AF]">
+                      <span>Length</span>
+                      <span className="font-mono text-[#111111] dark:text-[#FFFFFF] font-medium">{options.length} characters</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={8}
+                      max={64}
+                      value={options.length}
+                      onChange={(e) => handleOptionChange('length', parseInt(e.target.value))}
+                      className="w-full accent-[#111111] dark:accent-[#FFFFFF] h-1.5 bg-[#E5E7EB] dark:bg-[#27272A] rounded-lg cursor-pointer"
+                    />
                   </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={handleGenerateNew}
-                    className="bg-white border border-[#ECECEC] hover:border-zinc-300 text-zinc-800 text-xs font-medium py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-900 focus-visible:border-zinc-900"
-                  >
-                    <RefreshCw className="w-3 h-3 text-zinc-400" />
-                    <span>Generate New</span>
-                  </button>
+                  {/* Character Sets Toggles */}
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <label className="flex items-center gap-2 text-[#111111] dark:text-[#E4E4E7] cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={options.useUpper}
+                        onChange={(e) => handleOptionChange('useUpper', e.target.checked)}
+                        className="rounded border-[#E5E7EB] dark:border-[#27272A] accent-[#111111] dark:accent-[#FFFFFF] w-4 h-4"
+                      />
+                      <span>Uppercase (A-Z)</span>
+                    </label>
 
-                  <button
-                    type="button"
-                    onClick={() => handleCopyText(suggestedPassword, true)}
-                    className="bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
-                  >
-                    {copiedSuggested ? (
-                      <>
-                        <Check className="w-3 h-3 text-white" />
-                        <span>Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3 h-3 text-white/70" />
-                        <span>Copy</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
+                    <label className="flex items-center gap-2 text-[#111111] dark:text-[#E4E4E7] cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={options.useLower}
+                        onChange={(e) => handleOptionChange('useLower', e.target.checked)}
+                        className="rounded border-[#E5E7EB] dark:border-[#27272A] accent-[#111111] dark:accent-[#FFFFFF] w-4 h-4"
+                      />
+                      <span>Lowercase (a-z)</span>
+                    </label>
 
-            {/* SECTION 4: Suggested Password Analysis */}
-            <div className="bg-white border border-[#ECECEC] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.01)] flex flex-col gap-4">
-              <h2 className="text-[11px] font-medium text-zinc-500 uppercase tracking-widest">
-                Suggested Password Analysis
-              </h2>
-              
-              <div className="grid grid-cols-2 gap-4 border-b border-zinc-100 pb-4">
-                <div className="space-y-1">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Strength</span>
-                  <span className={`inline-flex items-center text-xs font-normal px-2.5 py-0.5 rounded-md border ${getBadgeClass(suggestedAnalysis.strength)}`}>
-                    {suggestedAnalysis.strength}
-                  </span>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Crack Time</span>
-                  <span className="text-xs font-mono font-normal text-zinc-900">
-                    {suggestedAnalysis.crackTime}
-                  </span>
-                </div>
-              </div>
+                    <label className="flex items-center gap-2 text-[#111111] dark:text-[#E4E4E7] cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={options.useNumbers}
+                        onChange={(e) => handleOptionChange('useNumbers', e.target.checked)}
+                        className="rounded border-[#E5E7EB] dark:border-[#27272A] accent-[#111111] dark:accent-[#FFFFFF] w-4 h-4"
+                      />
+                      <span>Numbers (0-9)</span>
+                    </label>
 
-              <div className="text-xs text-zinc-500 leading-relaxed font-normal">
-                {suggestedAnalysis.explanation}
-              </div>
-            </div>
+                    <label className="flex items-center gap-2 text-[#111111] dark:text-[#E4E4E7] cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={options.useSymbols}
+                        onChange={(e) => handleOptionChange('useSymbols', e.target.checked)}
+                        className="rounded border-[#E5E7EB] dark:border-[#27272A] accent-[#111111] dark:accent-[#FFFFFF] w-4 h-4"
+                      />
+                      <span>Symbols (!@#$)</span>
+                    </label>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Large Primary Generate Button */}
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.985 }}
+              onClick={() => handleGeneratePassword()}
+              disabled={isGenerating}
+              className="w-full bg-[#111111] hover:bg-[#222222] dark:bg-[#FFFFFF] dark:hover:bg-[#E4E4E7] text-[#FFFFFF] dark:text-[#111111] font-medium text-sm py-3.5 rounded-xl transition-all duration-150 flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#111111] dark:focus-visible:ring-[#FFFFFF] shadow-sm disabled:opacity-80"
+            >
+              <Sparkles className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
+              <span>{isGenerating ? 'Generating Password...' : 'Generate Password'}</span>
+            </motion.button>
 
           </div>
-
-        </div>
+        </section>
 
         {/* ==========================================
-            PLATFORM FOOTER
+            SECTION 2: PASSWORD SECURITY
            ========================================== */}
-        <footer className="text-center text-[10px] text-zinc-400 font-mono tracking-wider pt-4 border-t border-zinc-100">
-          SECURE CLIENT-SIDE OPERATIONS • POWERED BY PASSFORGE
+        <section className="bg-[#F7F7F8] dark:bg-[#141416] border border-[#E5E7EB] dark:border-[#27272A] rounded-[18px] p-5 sm:p-6 flex flex-col gap-4 transition-colors">
+          <h2 className="text-xs font-medium text-[#6B7280] dark:text-[#9CA3AF] uppercase tracking-wider">
+            Password Security
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+            <div className="flex flex-col gap-1 border-b sm:border-b-0 sm:border-r border-[#E5E7EB] dark:border-[#27272A] pb-3 sm:pb-0 sm:pr-4">
+              <span className="text-xs text-[#6B7280] dark:text-[#9CA3AF]">Strength</span>
+              <span className="text-lg font-medium text-[#111111] dark:text-[#FFFFFF] tracking-tight">
+                {securityAnalysis.strength}
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1 sm:pl-2">
+              <span className="text-xs text-[#6B7280] dark:text-[#9CA3AF]">Estimated Crack Time</span>
+              <span className="text-lg font-medium text-[#111111] dark:text-[#FFFFFF] tracking-tight font-mono">
+                {securityAnalysis.crackTime}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* ==========================================
+            SECTION 3: SECURITY INSIGHTS
+           ========================================== */}
+        <section className="bg-[#F7F7F8] dark:bg-[#141416] border border-[#E5E7EB] dark:border-[#27272A] rounded-[18px] p-5 sm:p-6 flex flex-col gap-4 transition-colors">
+          <h2 className="text-xs font-medium text-[#6B7280] dark:text-[#9CA3AF] uppercase tracking-wider">
+            Security Insights
+          </h2>
+
+          <div className="flex flex-col gap-2.5 text-xs text-[#6B7280] dark:text-[#9CA3AF] leading-relaxed pt-1">
+            <div className="flex items-start gap-2.5">
+              <span className="text-[#111111] dark:text-[#FFFFFF] shrink-0 font-medium">✓</span>
+              <span>Longer passwords dramatically increase security.</span>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <span className="text-[#111111] dark:text-[#FFFFFF] shrink-0 font-medium">✓</span>
+              <span>Symbols and numbers improve password entropy.</span>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <span className="text-[#111111] dark:text-[#FFFFFF] shrink-0 font-medium">✓</span>
+              <span>Avoid using personal information.</span>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <span className="text-[#111111] dark:text-[#FFFFFF] shrink-0 font-medium">✓</span>
+              <span>Every generated password is unique.</span>
+            </div>
+          </div>
+        </section>
+
+        {/* Footer info */}
+        <footer className="text-center text-xs text-[#6B7280] dark:text-[#6B7280] pt-4 pb-2">
+          PassForge • Client-Side Cryptographic Security
         </footer>
 
       </div>
+
+      {/* ==========================================
+          FLOATING COPY TOAST
+         ========================================== */}
+      <AnimatePresence>
+        {showToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-[#111111] dark:bg-[#FFFFFF] text-[#FFFFFF] dark:text-[#111111] px-4 py-2.5 rounded-full text-xs font-medium shadow-xl flex items-center gap-2"
+          >
+            <Check className="w-3.5 h-3.5" />
+            <span>✓ Password Copied</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ==========================================
+          MODALS / DIALOGS
+         ========================================== */}
+      <AnimatePresence>
+        {activeModal && (
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 dark:bg-black/60 backdrop-blur-sm"
+            onClick={() => setActiveModal(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              className="w-full max-w-md bg-[#FFFFFF] dark:bg-[#141416] border border-[#E5E7EB] dark:border-[#27272A] rounded-[24px] p-6 sm:p-7 shadow-2xl flex flex-col gap-5 relative"
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => setActiveModal(null)}
+                aria-label="Close dialog"
+                className="absolute top-5 right-5 text-[#6B7280] hover:text-[#111111] dark:text-[#9CA3AF] dark:hover:text-[#FFFFFF] p-1.5 rounded-full hover:bg-[#F7F7F8] dark:hover:bg-[#18181B] transition-colors focus-visible:outline-none"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              {/* ABOUT MODAL */}
+              {activeModal === 'about' && (
+                <div className="flex flex-col gap-3">
+                  <h2 className="text-base font-semibold text-[#111111] dark:text-[#FFFFFF]">
+                    About PassForge
+                  </h2>
+                  <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] leading-relaxed">
+                    PassForge is a modern password generator that creates strong, unique, and secure passwords in seconds. Everything is designed to be simple, fast, and privacy-friendly.
+                  </p>
+                </div>
+              )}
+
+              {/* WHY THIS APP MODAL */}
+              {activeModal === 'why' && (
+                <div className="flex flex-col gap-3">
+                  <h2 className="text-base font-semibold text-[#111111] dark:text-[#FFFFFF]">
+                    Why this App
+                  </h2>
+                  <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] leading-relaxed">
+                    Weak passwords are one of the most common reasons accounts become compromised.
+                  </p>
+                  <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] leading-relaxed">
+                    PassForge helps users instantly generate strong passwords that are significantly harder to crack while keeping the experience clean, fast, and effortless.
+                  </p>
+                  <div className="bg-[#F7F7F8] dark:bg-[#1C1C1F] border border-[#E5E7EB] dark:border-[#27272A] p-3.5 rounded-xl text-xs text-[#111111] dark:text-[#FFFFFF] font-medium leading-relaxed mt-1">
+                    &quot;Passwords are generated entirely on your device and are never stored or transmitted.&quot;
+                  </div>
+                </div>
+              )}
+
+              {/* PRIVACY MODAL */}
+              {activeModal === 'privacy' && (
+                <div className="flex flex-col gap-3">
+                  <h2 className="text-base font-semibold text-[#111111] dark:text-[#FFFFFF]">
+                    Privacy First
+                  </h2>
+                  <div className="flex flex-col gap-2 text-xs text-[#6B7280] dark:text-[#9CA3AF] pt-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[#111111] dark:text-[#FFFFFF] font-semibold">•</span>
+                      <span>No account required.</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[#111111] dark:text-[#FFFFFF] font-semibold">•</span>
+                      <span>No password storage.</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[#111111] dark:text-[#FFFFFF] font-semibold">•</span>
+                      <span>No tracking of generated passwords.</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[#111111] dark:text-[#FFFFFF] font-semibold">•</span>
+                      <span>Password generation happens locally.</span>
+                    </div>
+                    <div className="flex items-center gap-2 font-medium text-[#111111] dark:text-[#FFFFFF] pt-1">
+                      <span className="text-[#111111] dark:text-[#FFFFFF] font-semibold">•</span>
+                      <span>Your privacy comes first.</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* DEVELOPER MODAL */}
+              {activeModal === 'developer' && (
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[11px] uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">
+                      Designed & Developed by
+                    </span>
+                    <h2 className="text-lg font-semibold text-[#111111] dark:text-[#FFFFFF]">
+                      Muhammad Musthafa
+                    </h2>
+                    <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] pt-0.5">
+                      UI/UX Designer • Frontend Developer • Cybersecurity Learner
+                    </p>
+                  </div>
+
+                  <a
+                    href="https://muhammad-musthafa-web-dev-portfolio.vercel.app/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full bg-[#111111] hover:bg-[#222222] dark:bg-[#FFFFFF] dark:hover:bg-[#E4E4E7] text-[#FFFFFF] dark:text-[#111111] text-xs font-medium py-3 rounded-xl transition-colors flex items-center justify-center gap-2 focus-visible:outline-none"
+                  >
+                    <span>View Portfolio</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+
+                  <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] text-center pt-1">
+                    Thank you for using PassForge.
+                  </p>
+                </div>
+              )}
+
+              {/* Close Action Button */}
+              <button
+                onClick={() => setActiveModal(null)}
+                className="w-full bg-[#F7F7F8] dark:bg-[#1C1C1F] hover:bg-[#E5E7EB] dark:hover:bg-[#27272A] text-[#111111] dark:text-[#FFFFFF] text-xs font-medium py-2.5 rounded-xl transition-colors focus-visible:outline-none mt-1"
+              >
+                Close
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </main>
   );
 }
